@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Realtime Database Image Uploader</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        input[type="file"] {
+            margin: 15px 0;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .media-gallery {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+        .media-item {
+            width: 150px;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Realtime Database Image Uploader</h2>
+        
+        <!-- Sirf Images ke liye (Badi videos ke liye database theek nahi hota) -->
+        <input type="file" id="imageFile" accept="image/*"><br>
+        <button onclick="uploadImage()">Database Mein Save Karein</button>
+        
+        <p id="status"></p>
+
+        <h3>Saved Photos:</h3>
+        <div class="media-gallery" id="mediaGallery"></div>
+    </div>
+
+    <!-- Firebase SDK (Modular Version v10) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref as dbRef, push, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        // Aapki Firebase Configuration details
+        const firebaseConfig = {
+            apiKey: "AIzaSyCwpHJR49lhq8IPfa5aYFOkHuvjy-jQnlA",
+            authDomain: "galary-9a304.firebaseapp.com",
+            projectId: "galary-9a304",
+            storageBucket: "galary-9a304.firebasestorage.app",
+            messagingSenderId: "852527168390",
+            appId: "1:852527168390:web:27789bba3bf461c3c20a07",
+            measurementId: "G-8JQ7XZ7WGL"
+        };
+
+        // Firebase Initialize karein
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+
+        // Global upload function
+        window.uploadImage = function() {
+            const fileInput = document.getElementById('imageFile');
+            const file = fileInput.files[0];
+            const statusText = document.getElementById('status');
+
+            if (!file) {
+                alert("Pehle koi photo select karein!");
+                return;
+            }
+
+            statusText.innerText = "Processing image...";
+
+            // FileReader ka use karke image ko Base64 string me badalna
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            
+            reader.onload = function() {
+                const base64Image = reader.result;
+                
+                // Realtime Database mein data push karna
+                const mediaListRef = dbRef(database, 'photos');
+                push(mediaListRef, {
+                    imageUri: base64Image,
+                    timestamp: Date.now()
+                }).then(() => {
+                    statusText.innerText = "Photo Successfully Database Mein Save Ho Gayi!";
+                    fileInput.value = ""; 
+                }).catch((err) => {
+                    console.error("Database error:", err);
+                    statusText.innerText = "Save karne me error aaya!";
+                });
+            };
+
+            reader.onerror = function(error) {
+                console.error("Error: ", error);
+                statusText.innerText = "File read karne me error aaya!";
+            };
+        };
+
+        // Realtime Database se photos load karke screen par dikhana
+        function loadImagesFromDatabase() {
+            const gallery = document.getElementById('mediaGallery');
+            const mediaListRef = dbRef(database, 'photos');
+
+            onValue(mediaListRef, (snapshot) => {
+                gallery.innerHTML = ""; // Purana data clear karein
+                const data = snapshot.val();
+                
+                if (data) {
+                    Object.values(data).forEach((item) => {
+                        if (item.imageUri) {
+                            const img = document.createElement('img');
+                            img.src = item.imageUri;
+                            img.className = 'media-item';
+                            gallery.appendChild(img);
+                        }
+                    });
+                }
+            });
+        }
+
+        // Page load hote hi database se photos load karein
+        window.onload = loadImagesFromDatabase;
+    </script>
+
+</body>
+</html>
