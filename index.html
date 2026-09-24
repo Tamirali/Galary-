@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Storage + Realtime Database</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        input[type="file"] {
+            margin: 15px 0;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #progress {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .media-gallery {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+        .media-item {
+            width: 150px;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Firebase Storage & Realtime DB Uploader</h2>
+        
+        <!-- File Input -->
+        <input type="file" id="mediaFile" accept="image/*,video/*"><br>
+        <button onclick="uploadMedia()">Upload Karein</button>
+        
+        <p id="progress"></p>
+
+        <h3>Uploaded Media (from Database):</h3>
+        <div class="media-gallery" id="mediaGallery"></div>
+    </div>
+
+    <!-- Firebase SDK (Modular Version v10) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+        import { getDatabase, ref as dbRef, push, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        // Aapki Firebase Configuration details
+        const firebaseConfig = {
+            apiKey: "AIzaSyCwpHJR49lhq8IPfa5aYFOkHuvjy-jQnlA",
+            authDomain: "galary-9a304.firebaseapp.com",
+            projectId: "galary-9a304",
+            storageBucket: "galary-9a304.firebasestorage.app",
+            messagingSenderId: "852527168390",
+            appId: "1:852527168390:web:27789bba3bf461c3c20a07",
+            measurementId: "G-8JQ7XZ7WGL"
+        };
+
+        // Firebase Initialize karein
+        const app = initializeApp(firebaseConfig);
+        const storage = getStorage(app);
+        const database = getDatabase(app);
+
+        // Global upload function
+        window.uploadMedia = function() {
+            const fileInput = document.getElementById('mediaFile');
+            const file = fileInput.files[0];
+            const progressText = document.getElementById('progress');
+
+            if (!file) {
+                alert("Pehle koi photo ya video select karein!");
+                return;
+            }
+
+            // 1. Pehle Firebase Storage mein file upload karein
+            const storageRef = ref(storage, 'uploads/' + Date.now() + '_' + file.name);
+            const uploadTask = uploadBytesResumable(storageRef, file);
+
+            uploadTask.on('state_changed', 
+                (snapshot) => {
+                    const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                    progressText.innerText = `Upload Ho Raha Hai: ${Math.round(progress)}%`;
+                }, 
+                (error) => {
+                    console.error("Upload fail ho gaya:", error);
+                    progressText.innerText = "Upload fail ho gaya!";
+                }, 
+                () => {
+                    // 2. Upload complete hone par Download URL lein
+                    getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+                        
+                        // 3. Ab us URL ko Realtime Database mein save karein
+                        const mediaListRef = dbRef(database, 'mediaFiles');
+                        push(mediaListRef, {
+                            url: downloadURL,
+                            type: file.type,
+                            timestamp: Date.now()
+                        }).then(() => {
+                            progressText.innerText = "Database mein successfully save ho gaya!";
+                            fileInput.value = ""; 
+                        }).catch((err) => {
+                            console.error("Database error:", err);
+                            progressText.innerText = "Database mein save nahi ho paya!";
+                        });
+
+                    });
+                }
+            );
+        };
+
+        // Realtime Database se data sunkar gallery update karna
+        function loadMediaFromDatabase() {
+            const gallery = document.getElementById('mediaGallery');
+            const mediaListRef = dbRef(database, 'mediaFiles');
+
+            // Realtime listener (jaise hi database me data aayega, yeh automatically chalega)
+            onValue(mediaListRef, (snapshot) => {
+                gallery.innerHTML = ""; // Purana data clear karein
+                const data = snapshot.val();
+                
+                if (data) {
+                    Object.values(data).forEach((item) => {
+                        if (item.type && item.type.includes('video')) {
+                            const video = document.createElement('video');
+                            video.src = item.url;
+                            video.controls = true;
+                            video.className = 'media-item';
+                            gallery.appendChild(video);
+                        } else {
+                            const img = document.createElement('img');
+                            img.src = item.url;
+                            img.className = 'media-item';
+                            gallery.appendChild(img);
+                        }
+                    });
+                }
+            });
+        }
+
+        // Page load hote hi database se media load karein
+        window.onload = loadMediaFromDatabase;
+    </script>
+
+</body>
+</html>
